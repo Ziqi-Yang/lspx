@@ -317,11 +317,29 @@ CLIENT."
   (interactive)
   (lspx--execute-lsp-fn 'lsp-find-definition-fn))
 
+;;;###autoload
+(defun lspx-find-definition-xref ()
+  "Use `xref-find-definitions' as backup function for `lspx-find-definition'."
+  (interactive)
+  (let ((xref-prompt-for-identifier nil))
+    (condition-case nil
+        (lspx-find-definition)
+      (error (call-interactively #'xref-find-definitions)))))
 
 ;;;###autoload
 (defun lspx-find-definition-other-window ()
   (interactive)
   (lspx--execute-lsp-fn 'lsp-find-definition-other-window-fn))
+
+;;;###autoload
+(defun lspx-find-definition-other-window-xref ()
+  "Use `xref-find-definitions-other-window' as backup function."
+  (interactive)
+  (let ((xref-prompt-for-identifier nil))
+    (condition-case nil
+        (lspx-find-definition)
+      (error (call-interactively #'xref-find-definitions-other-window)))))
+
 
 ;;;###autoload
 (defun lspx-find-type-definition ()
@@ -338,6 +356,15 @@ CLIENT."
 (defun lspx-find-references ()
   (interactive)
   (lspx--execute-lsp-fn 'lsp-find-references-fn))
+
+;;;###autoload
+(defun lspx-find-references-xref ()
+  "Use `xref-find-references' as backup function for `lspx-find-references'."
+  (interactive)
+  (let ((xref-prompt-for-identifier nil))
+    (condition-case nil
+        (lspx-find-definition)
+      (error (call-interactively #'xref-find-references)))))
 
 
 ;;;###autoload
@@ -379,6 +406,10 @@ CLIENT."
 (defun lspx-format-region ()
   (interactive)
   (lspx--execute-lsp-fn 'lsp-format-region-fn))
+
+
+
+
 
 (provide 'lspx)
 
