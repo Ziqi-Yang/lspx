@@ -337,7 +337,7 @@ CLIENT."
   (interactive)
   (let ((xref-prompt-for-identifier nil))
     (condition-case nil
-        (lspx-find-definition)
+        (lspx-find-definition-other-window)
       (error (call-interactively #'xref-find-definitions-other-window)))))
 
 
@@ -363,7 +363,7 @@ CLIENT."
   (interactive)
   (let ((xref-prompt-for-identifier nil))
     (condition-case nil
-        (lspx-find-definition)
+        (lspx-find-references)
       (error (call-interactively #'xref-find-references)))))
 
 
