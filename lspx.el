@@ -41,41 +41,95 @@
 (defclass lspx-client ()
   ((identifier
     :initarg :id
-    :type symbol
-    :custom symbol
+    :type symbol :custom symbol
     :documentation "The identifier/name of a LSP client.")
+   (enable-auto-startup
+    :initarg :enable-auto-startup
+    :initform t
+    :type boolean :custom boolean
+    :documentation "Whether to enable automatically start up language server
+for managed major mode in a project.
+For example, for Eglot, this option should be set to nil since Eglot handles
+it itself.")
    (startup-fn
     :initarg :startup-fn
-    :type function
-    :custom function
+    :type function :custom function
     :documentation "Function for turning on client in a specific buffer.")
    (shutdown-fn
     :initarg :shutdown-fn
-    :type function
-    :custom function
+    :type function :custom function
     :documentation "Function for turning off client in a specific buffer.")
    ;; (:shutdown-all-fn
-   ;;  )
-   (check-alive-fn
-    :initarg :check-alive-fn
-    :type function
-    :custom function
-    :documentation "Function for checking whether a client is alive in a specific buffer."))
-  "A class for defining LSP client.")
+   ;;  :initarg :shutdown-all-fn
+   ;;  :type function
+   ;;  :custom function
+   ;;  :documentation "Shutdown all language servers managed by this LSP client.")
+   (check-alive-in-buffer-fn
+    :initarg :check-alive-in-buffer-fn
+    :type function :custom function
+    :documentation "Function for checking whether a client is alive in a specific buffer.")
+   
+   
+   (lsp-rename-fn
+    :initarg :lsp-rename-fn
+    :initform nil
+    :type function :custom function)
+   (lsp-find-definition-fn
+    :initarg :lsp-find-definition-fn
+    :initform nil
+    :type function :custom function)
+   (lsp-find-type-definition-fn
+    :initarg :lsp-find-type-definition-fn
+    :initform nil
+    :type function :custom function)
+   (lsp-find-type-definition-other-window-fn
+    :initarg :lsp-find-type-definition-other-window-fn
+    :initform nil
+    :type function :custom function)
+   (lsp-find-references-fn
+    :initarg :lsp-find-references-fn
+    :initform nil
+    :type function :custom function)
+   (lsp-find-implementation-fn
+    :initarg :lsp-find-implementation-fn
+    :initform nil
+    :type function :custom function)
+   (lsp-toggle-inlay-hint-fn
+    :initarg :lsp-toggle-inlay-hint-fn
+    :initform nil
+    :type function :custom function)
+   (lsp-show-buffer-errors-fn
+    :initarg :lsp-show-buffer-errors-fn
+    :initform nil
+    :type function :custom function)
+   (lsp-execute-code-action-fn
+    :initarg :lsp-execute-code-action-fn
+    :initform nil
+    :type function :custom function)
+   (lsp-show-documentation-fn
+    :initarg :lsp-show-documentation-fn
+    :initform nil
+    :type function :custom function))
+  "A class for defining LSP client."
+  :allow-nil-initform t)
 
 (defconst lspx-eglot-client
   (lspx-client
    :id 'eglot
+   :enable-auto-startup nil
    :startup-fn #'eglot
    :shutdown-fn #'eglot-shutdown
-   :check-alive-fn (lambda () ())))
+   :check-alive-in-buffer-fn #'eglot-managed-p
+   
+   :lsp-rename-fn #'eglot-rename))
 
 (defconst lspx-lsp-mode-client
   (lspx-client
    :id 'lsp-mode
+   :enable-auto-startup t
    :startup-fn #'lsp-deferred
    :shutdown-fn #'lsp-workspace-shutdown
-   :check-alive-fn (lambda () lsp-mode)))
+   :check-alive-in-buffer-fn (lambda () lsp-mode)))
 
 (defcustom lspx-clients
   (list lspx-eglot-client lspx-lsp-mode-client)
@@ -101,46 +155,84 @@
 (defun lspx--alive-client-map-key ()
   (cons (project-root (project-current)) major-mode))
 
-(defun lspx--cur-alive-client ()
+(defun lspx--cur-client ()
+  "Get current LSP client for current major-mode in current project.
+NOTE that `project-current' can produce error while being evaluated.  To avoid
+this run-time error, use `lspx--maybe-cur-client' instead."
   (gethash (lspx--alive-client-map-key) lspx--alive-client-map))
 
-(defun lspx--funcall (fn)
+(defun lspx--maybe-alive-client-map-key ()
+  (when-let* ((project (project-current))
+              (project-root-path (project-root project)))
+    (cons project-root-path major-mode)))
+
+(defun lspx--maybe-cur-client ()
+  (when-let ((key (lspx--maybe-alive-client-map-key)))
+    (gethash key lspx--alive-client-map)))
+
+
+(defun lspx--cur-client-user-error ()
+  "A variant of `lsp--cur-client' that produce user-error when no client."
+  (let ((client (lspx--cur-client)))
+    (unless client
+      (user-error "No LSP client is handling this major mode in the project"))
+    client))
+
+(defun lspx--funcall-maybe-interactively (fn)
   "Call function FN interactively if its a command, or normally if not."
   (if (commandp fn)
       (call-interactively fn)
     (funcall fn)))
 
+;;;###autoload
 (defun lspx (client)
   "Start LSP client for current mode for current project.
 CLIENT."
   (interactive
    (progn
-     (when-let ((cur-client (lspx--cur-alive-client)))
+     (when-let ((cur-client (lspx--cur-client)))
        (user-error "LSP client %s is currently handling this major mode in the project!"
                    (slot-value cur-client 'identifier)))
      (list (lspx--choose-client))))
 
   (unless (called-interactively-p 'interactive)
-    (when-let ((cur-client (lspx--cur-alive-client)))
+    (when-let ((cur-client (lspx--cur-client)))
       (user-error "LSP client %s is currently handling this major mode in the project!"
                   (slot-value cur-client 'identifier))))
   
-  (lspx--funcall (slot-value client 'startup-fn))
+  (lspx--funcall-maybe-interactively (slot-value client 'startup-fn))
   (puthash (lspx--alive-client-map-key) client lspx--alive-client-map))
 
+;;;###autoload
 (defun lspx-shutdown ()
   (interactive)
-  (let ((client (lspx--cur-alive-client)))
-    (if (not client)
-        (user-error "No LSP client is handling this major mode in the project")
-      (unwind-protect
-          (lspx--funcall (slot-value client 'shutdown-fn))
-        (remhash (lspx--alive-client-map-key) lspx--alive-client-map)))))
+  (let ((client (lspx--cur-client-user-error)))
+    (unwind-protect
+        (lspx--funcall-maybe-interactively (slot-value client 'shutdown-fn))
+      (remhash (lspx--alive-client-map-key) lspx--alive-client-map))))
 
-(defun lspx-shutdown-all ()
+(defun lspx--maybe-start-lsp ()
+  (when-let ((client (lspx--maybe-cur-client)))
+    (when (and (slot-value client 'enable-auto-startup)
+               (not (funcall (slot-value client 'check-alive-in-buffer-fn))))
+      (lspx--funcall-maybe-interactively (slot-value client 'startup-fn)))))
+
+
+(defun lspx-setup-lspx()
+  (add-hook 'after-change-major-mode-hook #'lspx--maybe-start-lsp))
+
+
+(defun lspx--execute-lsp-fn (attr)
+  (let* ((client (lspx--cur-client-user-error))
+         (fn (slot-value client attr)))
+    (unless fn
+      (user-error "LSP client %s doesn't support feature %s or is not "
+                  "configured properly." client attr))
+    (lspx--funcall-maybe-interactively fn)))
+
+(defun lspx-rename ()
   (interactive)
-  ())
-
+  (lspx--execute-lsp-fn 'lsp-rename-fn))
 
 
 (provide 'lspx)
