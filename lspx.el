@@ -44,16 +44,18 @@
     :type symbol
     :custom symbol
     :documentation "The identifier/name of a LSP client.")
-   (turn-on-fn
-    :initarg :turn-on-fn
+   (startup-fn
+    :initarg :startup-fn
     :type function
     :custom function
     :documentation "Function for turning on client in a specific buffer.")
-   (turn-off-fn
-    :initarg :turn-off-fn
+   (shutdown-fn
+    :initarg :shutdown-fn
     :type function
     :custom function
     :documentation "Function for turning off client in a specific buffer.")
+   ;; (:shutdown-all-fn
+   ;;  )
    (check-alive-fn
     :initarg :check-alive-fn
     :type function
@@ -64,15 +66,15 @@
 (defconst lspx-eglot-client
   (lspx-client
    :id 'eglot
-   :turn-on-fn #'eglot
-   :turn-off-fn #'eglot-shutdown
+   :startup-fn #'eglot
+   :shutdown-fn #'eglot-shutdown
    :check-alive-fn (lambda () ())))
 
 (defconst lspx-lsp-mode-client
   (lspx-client
    :id 'lsp-mode
-   :turn-on-fn #'lsp-deferred
-   :turn-off-fn (lambda () ())
+   :startup-fn #'lsp-deferred
+   :shutdown-fn #'lsp-workspace-shutdown
    :check-alive-fn (lambda () lsp-mode)))
 
 (defcustom lspx-clients
@@ -102,6 +104,12 @@
 (defun lspx--cur-alive-client ()
   (gethash (lspx--alive-client-map-key) lspx--alive-client-map))
 
+(defun lspx--funcall (fn)
+  "Call function FN interactively if its a command, or normally if not."
+  (if (commandp fn)
+      (call-interactively fn)
+    (funcall fn)))
+
 (defun lspx (client)
   "Start LSP client for current mode for current project.
 CLIENT."
@@ -117,12 +125,17 @@ CLIENT."
       (user-error "LSP client %s is currently handling this major mode in the project!"
                   (slot-value cur-client 'identifier))))
   
-  (call-interactively (slot-value client 'turn-on-fn))
+  (lspx--funcall (slot-value client 'startup-fn))
   (puthash (lspx--alive-client-map-key) client lspx--alive-client-map))
 
 (defun lspx-shutdown ()
   (interactive)
-  ())
+  (let ((client (lspx--cur-alive-client)))
+    (if (not client)
+        (user-error "No LSP client is handling this major mode in the project")
+      (unwind-protect
+          (lspx--funcall (slot-value client 'shutdown-fn))
+        (remhash (lspx--alive-client-map-key) lspx--alive-client-map)))))
 
 (defun lspx-shutdown-all ()
   (interactive)
