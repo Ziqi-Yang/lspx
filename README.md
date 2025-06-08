@@ -22,7 +22,7 @@ If you execute command `lspx`/`elgot` on a file in a project, then all files of 
 (e.g. `rust-analyzer`), and you don't need to manually execute `lspx`/`eglot` again
 on newly opened files of the same file type.
 
-You can use `lspx` to choose and start language server, use `lspx-shutdown` to shutdown
+You can use `lspx` to choose and start a LSP client, use `lspx-shutdown` to shutdown
 it.
 
 Commands like `lspx-rename` are provided. They are basically glue functions
