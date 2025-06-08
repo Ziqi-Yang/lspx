@@ -78,6 +78,10 @@ it itself.")
     :initarg :lsp-find-definition-fn
     :initform nil
     :type function :custom function)
+   (lsp-find-definition-other-window-fn
+    :initarg :lsp-find-definition-other-window-fn
+    :initform nil
+    :type function :custom function)
    (lsp-find-type-definition-fn
     :initarg :lsp-find-type-definition-fn
     :initform nil
@@ -109,9 +113,53 @@ it itself.")
    (lsp-show-documentation-fn
     :initarg :lsp-show-documentation-fn
     :initform nil
+    :type function :custom function)
+   (lsp-format-buffer-fn
+    :initarg :lsp-format-buffer-fn
+    :initform nil
+    :type function :custom function)
+   (lsp-format-region-fn
+    :initarg :lsp-format-region-fn
+    :initform nil
     :type function :custom function))
   "A class for defining LSP client."
   :allow-nil-initform t)
+
+(defun lspx--display-buffer-in-other-window ()
+  "Display current buffer in the other window."
+  (let ((buf (current-buffer))
+        (window (selected-window)))
+    (with-selected-window
+        (display-buffer
+         buf
+         `((xref--display-buffer-in-other-window)
+           (window . ,window)))
+      (selected-window))))
+
+(defun lspx--eglot-find-type-definition-other-window ()
+  (interactive)
+  (let (has-find target-window)
+    ;; TODO wrong behavior: eglot-find-typeDefinition jumps to same buffer different position
+    (setq has-find (not (string-match-p
+                         "returned no"
+                         (or (eglot-find-typeDefinition) ""))))
+    (when has-find
+      (setq target-window (lspx--display-buffer-in-other-window))
+      (previous-buffer)
+      (select-window target-window))))
+
+(defun lspx--lsp-mode-find-type-definition-other-window ()
+  (interactive)
+  (let (has-find target-window)
+    ;; TODO wrong behavior: eglot-find-typeDefinition jumps to same buffer different position
+    (setq has-find (not (string-match-p
+                         "not found"
+                         (or (lsp-find-type-definition) ""))))
+    (when has-find
+      (setq target-window (lspx--display-buffer-in-other-window))
+      (previous-buffer)
+      (select-window target-window))))
+
 
 (defconst lspx-eglot-client
   (lspx-client
@@ -121,7 +169,19 @@ it itself.")
    :shutdown-fn #'eglot-shutdown
    :check-alive-in-buffer-fn #'eglot-managed-p
    
-   :lsp-rename-fn #'eglot-rename))
+   :lsp-rename-fn #'eglot-rename
+   :lsp-find-definition-fn #'xref-find-definitions
+   :lsp-find-definition-other-window-fn #'xref-find-definitions-other-window
+   :lsp-find-type-definition-fn #'eglot-find-typeDefinition
+   :lsp-find-type-definition-other-window-fn #'lspx--eglot-find-type-definition-other-window
+   :lsp-find-references-fn #'xref-find-references
+   :lsp-find-implementation-fn #'eglot-find-implementation
+   :lsp-toggle-inlay-hint-fn #'eglot-inlay-hints-mode
+   :lsp-show-buffer-errors-fn #'flymake-show-buffer-diagnostics
+   :lsp-execute-code-action-fn #'eglot-code-actions
+   :lsp-show-documentation-fn #'eldoc
+   :lsp-format-buffer-fn #'eglot-format-buffer
+   :lsp-format-region-fn #'eglot-format))
 
 (defconst lspx-lsp-mode-client
   (lspx-client
@@ -129,7 +189,21 @@ it itself.")
    :enable-auto-startup t
    :startup-fn #'lsp-deferred
    :shutdown-fn #'lsp-workspace-shutdown
-   :check-alive-in-buffer-fn (lambda () lsp-mode)))
+   :check-alive-in-buffer-fn (lambda () lsp-mode)
+
+   :lsp-rename-fn #'lsp-rename
+   :lsp-find-definition-fn #'xref-find-definitions
+   :lsp-find-definition-other-window-fn #'xref-find-definitions-other-window
+   :lsp-find-type-definition-fn #'lsp-find-type-definition
+   :lsp-find-type-definition-other-window-fn #'lspx--lsp-mode-find-type-definition-other-window
+   :lsp-find-references-fn #'xref-find-references
+   :lsp-find-implementation-fn #'lsp-find-implementation
+   :lsp-toggle-inlay-hint-fn #'lsp-inlay-hints-mode
+   :lsp-show-buffer-errors-fn #'flymake-show-buffer-diagnostics
+   :lsp-execute-code-action-fn #'lsp-execute-code-action
+   :lsp-show-documentation-fn #'eldoc
+   :lsp-format-buffer-fn #'lsp-format-buffer
+   :lsp-format-region-fn #'lsp-format-region))
 
 (defcustom lspx-clients
   (list lspx-eglot-client lspx-lsp-mode-client)
@@ -224,16 +298,87 @@ CLIENT."
 
 (defun lspx--execute-lsp-fn (attr)
   (let* ((client (lspx--cur-client-user-error))
-         (fn (slot-value client attr)))
+         (fn (slot-value client attr))
+         (xref-prompt-for-identifier nil))
     (unless fn
-      (user-error "LSP client %s doesn't support feature %s or is not "
-                  "configured properly." client attr))
+      (user-error
+       "LSP client %s doesn't support feature %s or is not configured properly"
+       (slot-value client 'identifier) attr))
     (lspx--funcall-maybe-interactively fn)))
 
+;;;###autoload
 (defun lspx-rename ()
   (interactive)
   (lspx--execute-lsp-fn 'lsp-rename-fn))
 
+
+;;;###autoload
+(defun lspx-find-definition ()
+  (interactive)
+  (lspx--execute-lsp-fn 'lsp-find-definition-fn))
+
+
+;;;###autoload
+(defun lspx-find-definition-other-window ()
+  (interactive)
+  (lspx--execute-lsp-fn 'lsp-find-definition-other-window-fn))
+
+;;;###autoload
+(defun lspx-find-type-definition ()
+  (interactive)
+  (lspx--execute-lsp-fn 'lsp-find-type-definition-fn))
+
+
+;;;###autoload
+(defun lspx-find-type-definition-other-window ()
+  (interactive)
+  (lspx--execute-lsp-fn 'lsp-find-type-definition-other-window-fn))
+
+;;;###autoload
+(defun lspx-find-references ()
+  (interactive)
+  (lspx--execute-lsp-fn 'lsp-find-references-fn))
+
+
+;;;###autoload
+(defun lspx-find-implementation ()
+  (interactive)
+  (lspx--execute-lsp-fn 'lsp-find-implementation-fn))
+
+;;;###autoload
+(defun lspx-toggle-inlay-hint ()
+  (interactive)
+  (lspx--execute-lsp-fn 'lsp-toggle-inlay-hint-fn))
+
+
+;;;###autoload
+(defun lspx-show-buffer-errors ()
+  (interactive)
+  (lspx--execute-lsp-fn 'lsp-show-buffer-errors-fn))
+
+
+
+;;;###autoload
+(defun lspx-execute-code-action ()
+  (interactive)
+  (lspx--execute-lsp-fn 'lsp-execute-code-action-fn))
+
+
+;;;###autoload
+(defun lspx-show-documentation ()
+  (interactive)
+  (lspx--execute-lsp-fn 'lsp-show-documentation-fn))
+
+
+;;;###autoload
+(defun lspx-format-buffer ()
+  (interactive)
+  (lspx--execute-lsp-fn 'lsp-format-buffer-fn))
+
+;;;###autoload
+(defun lspx-format-region ()
+  (interactive)
+  (lspx--execute-lsp-fn 'lsp-format-region-fn))
 
 (provide 'lspx)
 
