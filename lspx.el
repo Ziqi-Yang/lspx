@@ -1,4 +1,4 @@
-;;; lspx.el --- Organize Emacs LSP Clients  -*- lexical-binding: t; -*-
+;;; lspx.el --- Organize LSP Clients  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2025 meowking<mr.meowking@posteo.com>
 
@@ -7,7 +7,7 @@
 ;; Keywords: convenience
 ;; URL: https://codeberg.org/meow_king/lspx
 ;; License: GNU General Public License >= 3
-;; Package-Requires: ()  ;FIXME: `package-lint-current-buffer'
+;; Package-Requires: ((emacs "29.1"))
 
 ;; This file is NOT part of Emacs.
 ;; This program is free software: you can redistribute it and/or modify
@@ -29,14 +29,24 @@
 
 ;; Currently only support project.el integration
 
+;; The reason why I create this project:
+;; I find it hard to setup Vue Language Server(shit) in Eglot, and 
+;; failed to set it correctly
+;; -> use lsp-mode -> find it works out of the box !! happy!
+;; -> performance issue (blocks the entire UI, even though I uses emacs-lsp-booster) :(
+;; -> use lsp-bridge
+
+
 ;;; Code:
 
 (require 'eglot)
 (require 'lsp-mode nil t)
+(require 'lsp-bridge nil t)
 
 (defgroup lspx nil
   "Lspx."
-  :prefix "lspx")
+  :prefix "lspx"
+  :group 'convenience)
 
 (defclass lspx-client ()
   ((identifier
@@ -205,8 +215,32 @@ it itself.")
    :lsp-format-buffer-fn #'lsp-format-buffer
    :lsp-format-region-fn #'lsp-format-region))
 
+(defconst lspx-lsp-bridge-client
+  (lspx-client
+   :id 'lsp-bridge
+   :enable-auto-startup t
+   :startup-fn #'lsp-bridge-mode
+   ;; TODO only kill one language server (for one major mode in a project)
+   ;; instead of the whole lsp-bridge process
+   :shutdown-fn #'lsp-bridge-kill-process
+   :check-alive-in-buffer-fn (lambda () lsp-bridge-mode)
+
+   :lsp-rename-fn #'lsp-bridge-rename
+   :lsp-find-definition-fn #'lsp-bridge-find-def
+   :lsp-find-definition-other-window-fn #'lsp-bridge-find-def-other-window
+   :lsp-find-type-definition-fn #'lsp-bridge-find-type-def
+   :lsp-find-type-definition-other-window-fn #'lsp-bridge-find-type-def-other-window
+   :lsp-find-references-fn #'lsp-bridge-find-references
+   :lsp-find-implementation-fn #'lsp-bridge-find-impl
+   ;; :lsp-toggle-inlay-hint-fn nil
+   :lsp-show-buffer-errors-fn #'lsp-bridge-diagnostic-list
+   :lsp-execute-code-action-fn #'lsp-bridge-code-action
+   :lsp-show-documentation-fn #'lsp-bridge-popup-documentation
+   ;; :lsp-format-region-fn nil
+   :lsp-format-buffer-fn #'lsp-bridge-code-format))
+
 (defcustom lspx-clients
-  (list lspx-eglot-client lspx-lsp-mode-client)
+  (list lspx-eglot-client lspx-lsp-mode-client lspx-lsp-bridge-client)
   "A list of supported LSP clients."
   :type (list lspx-client)
   :group 'lspx)
