@@ -432,6 +432,16 @@ CLIENT."
 
 
 ;;;###autoload
+(defun lspx-show-documentation-eldoc ()
+  "Use `eldoc' as backup function."
+  (interactive)
+  (condition-case nil
+      (lspx-show-documentation)
+    (error (call-interactively #'eldoc))))
+
+
+
+;;;###autoload
 (defun lspx-format-buffer ()
   (interactive)
   (lspx--execute-lsp-fn 'lsp-format-buffer-fn))
