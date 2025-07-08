@@ -116,6 +116,10 @@ it itself.")
     :initarg :lsp-show-buffer-errors-fn
     :initform nil
     :type function :custom function)
+   (lsp-show-project-errors-fn
+    :initarg :lsp-show-project-errors-fn
+    :initform nil
+    :type function :custom function)
    (lsp-execute-code-action-fn
     :initarg :lsp-execute-code-action-fn
     :initform nil
@@ -188,6 +192,7 @@ it itself.")
    :lsp-find-implementation-fn #'eglot-find-implementation
    :lsp-toggle-inlay-hint-fn #'eglot-inlay-hints-mode
    :lsp-show-buffer-errors-fn #'flymake-show-buffer-diagnostics
+   :lsp-show-project-errors-fn #'flymake-show-project-diagnostics
    :lsp-execute-code-action-fn #'eglot-code-actions
    :lsp-show-documentation-fn #'eldoc
    :lsp-format-buffer-fn #'eglot-format-buffer
@@ -210,6 +215,7 @@ it itself.")
    :lsp-find-implementation-fn #'lsp-find-implementation
    :lsp-toggle-inlay-hint-fn #'lsp-inlay-hints-mode
    :lsp-show-buffer-errors-fn #'flymake-show-buffer-diagnostics
+   :lsp-show-project-errors-fn #'flymake-show-project-diagnostics
    :lsp-execute-code-action-fn #'lsp-execute-code-action
    :lsp-show-documentation-fn #'eldoc
    :lsp-format-buffer-fn #'lsp-format-buffer
@@ -234,6 +240,7 @@ it itself.")
    :lsp-find-implementation-fn #'lsp-bridge-find-impl
    ;; :lsp-toggle-inlay-hint-fn nil
    :lsp-show-buffer-errors-fn #'lsp-bridge-diagnostic-list
+   :lsp-show-project-errors-fn #'lsp-bridge-workspace-diagnostic-list
    :lsp-execute-code-action-fn #'lsp-bridge-code-action
    :lsp-show-documentation-fn #'lsp-bridge-popup-documentation
    ;; :lsp-format-region-fn nil
@@ -415,7 +422,16 @@ CLIENT."
 ;;;###autoload
 (defun lspx-show-buffer-errors ()
   (interactive)
-  (lspx--execute-lsp-fn 'lsp-show-buffer-errors-fn))
+  (condition-case nil
+      (lspx--execute-lsp-fn 'lsp-show-buffer-errors-fn)
+    (error (call-interactively #'flymake-show-buffer-diagnostics))))
+
+(defun lspx-show-project-errors ()
+  (interactive)
+  (condition-case nil
+      (lspx--execute-lsp-fn 'lsp-show-project-errors-fn)
+    (error (call-interactively #'flymake-show-project-diagnostics))))
+
 
 
 
